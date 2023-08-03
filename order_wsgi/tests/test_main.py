@@ -33,9 +33,10 @@ class TestOrderThread:
         }
     }
     a_expected_output_1 = (
-        (
-            b'ab\r\nContent-Length: 9\r\n\r\n{"a":"b"}',
-        )
+        
+            b'ab\r\nContent-Length: 9',
+            b'{"a":"b"}',
+        
     )
     a_class_1 = OrderThread
     a_init_1 = {
@@ -73,6 +74,7 @@ class TestOrderThread:
     a_expected_output_2 = (
         (
             b'ab\r\nContent-Lengh: 9\r\n\r\n{',
+            b''
         )
     )
     a_class_2 = OrderThread

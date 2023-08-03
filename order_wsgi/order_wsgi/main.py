@@ -4,7 +4,10 @@ import pdb
 import socket
 import threading
 
+# i wil reuse one connection instead of making many
 redis_lock = threading.Lock()
+
+# this will keep the state fo responses
 dict_lock = threading.Lock()
 
 class OrderThread(threading.Thread):
@@ -15,7 +18,17 @@ class OrderThread(threading.Thread):
 
     def run(self):
         # get the data to parse the http request
-        self.request = self.get_data()
+        headers, payload = self.get_data()
+        
+        # need to get method from headers
+        # the method determines, what goes next
+        
+
+
+        self.client_socket.sendall(b'HTTP/1.1 200\r\n')
+        self.client_socket.close()
+        # need to get the method and the payload to go on
+        
 
     def get_data(self) -> bytes:
         """Return the data of request.
@@ -23,8 +36,9 @@ class OrderThread(threading.Thread):
         :param socket: a client socket to read bytes from.
         :returns: bytes of the request from the socket.
         """
-        pdb.set_trace()
         data: bytes = b''
+        headers: bytes
+        payload: bytes
         content_length: Optional[int] = None
         
         while True:
@@ -35,17 +49,18 @@ class OrderThread(threading.Thread):
             # empty data would end up being empty data
             # bytestring having no CRLF sequence will be just the bytestring
             if content_length == 0:
-                return data
+                return headers, payload
             
             if content_length:
                 new_chunk: bytes = self.client_socket.recv(4096)
                 content_length -= len(new_chunk)
-                data += new_chunk
+                payload += new_chunk
+                continue
 
             data: bytes = data + self.client_socket.recv(4096)
             chunks: list[bytes] = data.split(b'\r\n\r\n')
             if not chunks[0]:
-                return data
+                return data, b''
             
             if len(chunks) == 1:
                 # this means there was no CRLFCRLF sequence yet
@@ -61,13 +76,14 @@ class OrderThread(threading.Thread):
                 byte_length, *_ = post_headers.split(b'\r\n')
                 # potential value error
                 content_length = int(byte_length)
+                payload: bytes = b'\r\n\r\n'.join(body_parts)
             except ValueError:
                 # wont be able to guess the length of the payload
                 # so i return it
-                return data
+                return headers, payload
             
-            body: bytes = b'\r\n\r\n'.join(body_parts)
-            content_length -= len(body)
+            
+            content_length -= len(payload)
 
 
 
