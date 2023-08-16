@@ -1,14 +1,68 @@
+from datetime import datetime
+from time import sleep
 from typing import Generator, Optional
 
+import json
 import pdb
 import socket
 import threading
 
+from order_wsgi.redis_con import redis_connection
+
+# cd order_wsgi      
+# python -m order_wsgi.main
+status_dict = {}
+
 # i wil reuse one connection instead of making many
 redis_lock = threading.Lock()
 
+# lock for redis queue
+queue_lock = threading.Lock()
+
 # this will keep the state fo responses
 dict_lock = threading.Lock()
+
+def await_status(order_id: int):
+    status = None
+    while not status:
+        print(f'retrieving status for {order_id}')
+        sleep(2)
+        with dict_lock:
+            status = status_dict.get(order_id)
+    return status
+
+def get_id() -> int:
+    current_timestamp = int(datetime.now().timestamp()*1000)
+    print(f'new id requested {current_timestamp}')
+    return current_timestamp
+
+def get_verb(headers: bytes) -> bytes:
+    result = []
+    print(headers)
+    for l in headers:
+        if l == 32:
+            break
+        result.append(l)
+    return bytes(result)
+
+def insert_order(order_id: int, order_obj: dict):
+    with redis_lock:
+        # later here will be sending stuff to redis database
+        print(f'order {order_id} goes to db')
+        print(order_obj)
+
+def queue_order(order_id):
+    with queue_lock:
+        print(f'putting order {order_id} to redis queue')
+        redis_connection.lpush('order_queue', order_id)
+
+def update_status(order_update_obj: bytes):
+    print(order_update_obj)
+    update_dict = json.loads(order_update_obj)
+    update_dict['id'] = int(update_dict['id'])
+    with dict_lock:
+        print(f'updating status of {update_dict}')
+        status_dict[update_dict['id']] = update_dict['status']
 
 class OrderThread(threading.Thread):
     def __init__(self, client_socket, client_address):
@@ -19,16 +73,23 @@ class OrderThread(threading.Thread):
     def run(self):
         # get the data to parse the http request
         headers, payload = self.get_data()
+        print(headers, payload)
+        verb = get_verb(headers)
+        if verb == b'POST': 
+            order_id = get_id()
+            insert_order(order_id, payload)
+            queue_order(order_id)
+            await_status(order_id)
+            # need to get method from headers
+            # the method determines, what goes next
+            self.client_socket.sendall(b'HTTP/1.1 200\r\n')
+            self.client_socket.close()
+            # need to get the method and the payload to go on
         
-        # need to get method from headers
-        # the method determines, what goes next
-        
-
-
-        self.client_socket.sendall(b'HTTP/1.1 200\r\n')
-        self.client_socket.close()
-        # need to get the method and the payload to go on
-        
+        elif verb == b'PUT':
+            update_status(payload)
+            self.client_socket.sendall(b'HTTP/1.1 200\r\n')
+            self.client_socket.close()          
 
     def get_data(self) -> bytes:
         """Return the data of request.
@@ -49,6 +110,7 @@ class OrderThread(threading.Thread):
             # empty data would end up being empty data
             # bytestring having no CRLF sequence will be just the bytestring
             if content_length == 0:
+                self.request = (headers, payload)
                 return headers, payload
             
             if content_length:
@@ -60,6 +122,7 @@ class OrderThread(threading.Thread):
             data: bytes = data + self.client_socket.recv(4096)
             chunks: list[bytes] = data.split(b'\r\n\r\n')
             if not chunks[0]:
+                self.request = (headers, payload)
                 return data, b''
             
             if len(chunks) == 1:
@@ -80,26 +143,11 @@ class OrderThread(threading.Thread):
             except ValueError:
                 # wont be able to guess the length of the payload
                 # so i return it
+                self.request = (headers, payload)
                 return headers, payload
             
             
             content_length -= len(payload)
-
-
-
-    def read_request(self) -> str:
-        # Read data from the client socket
-        request_data = b''
-        while True:
-            data = self.client_socket.recv(4096)
-            print(data)
-            request_data += data
-
-        # need some parsing here and stuff
-
-
-    def extract_http_properties(request_data) -> dict: ...
-
 
 def main():
     host = '127.0.0.1'
