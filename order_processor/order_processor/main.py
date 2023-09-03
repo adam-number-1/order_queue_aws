@@ -26,9 +26,9 @@ def get_order(order_id: int, dynamo_client) -> dict:
     :return: json object of the order.
     """
     response: dict = dynamo_client.get_item(
-        TableName='order_table',
+        TableName='orders_table',
         Key={
-            'string': {
+            'id': {
                 'N': f'{order_id}'
             }
         },
@@ -50,7 +50,7 @@ def get_items(id_list: list[int], dynamo_client) -> dict:
         response: dict = dynamo_client.get_item(
             TableName='items_table',
             Key={
-                'string': {
+                'id': {
                     'N': f'{id}'
                 }
             },
@@ -71,11 +71,11 @@ def push_new_quantities(items: dict, dynamo_client) -> None:
         _ = dynamo_client.update_item(
             TableName='items_table',
             Key={
-                'string': {
+                'id': {
                     'N': item_id
                 }
             },
-            UpdateExpression="SET availabeQuantity = :av",
+            UpdateExpression="SET availableQuantity = :av",
             ExpressionAttributeValues={
                 ':av': {
                     'N': f'{av_quant}'
