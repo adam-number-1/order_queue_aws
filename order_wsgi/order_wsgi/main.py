@@ -2,12 +2,14 @@ from datetime import datetime
 from time import sleep
 from typing import Generator, Optional
 
+import boto3
 import json
-import pdb
 import socket
 import threading
 
 from order_wsgi.redis_con import redis_connection
+
+dynamo_client = boto3.client('dynamodb')
 
 # cd order_wsgi      
 # python -m order_wsgi.main
@@ -21,6 +23,9 @@ queue_lock = threading.Lock()
 
 # this will keep the state fo responses
 dict_lock = threading.Lock()
+
+# this will keep the state fo responses
+dynamo_lock = threading.Lock()
 
 def await_status(order_id: int):
     status = None
@@ -45,11 +50,38 @@ def get_verb(headers: bytes) -> bytes:
         result.append(l)
     return bytes(result)
 
-def insert_order(order_id: int, order_obj: dict):
-    with redis_lock:
-        # later here will be sending stuff to redis database
+def insert_order(order_id: int, order_obj: dict) -> None:
+
+    cart_items: dict[str, list] = {
+        'L': []
+    }
+    for cart_item in order_obj['cartItems']:
+        cart_items['L'].append(
+            {
+                'M': {
+                    'id': {
+                        'N': str(cart_item['id'])
+                    },
+                    'orderedQuantity': {
+                        'N': str(cart_item['orderedQuantity'])
+                    }
+                }
+            }
+        )
+
+    with dynamo_lock:
+        # here needs to be put item in the dynamodb
         print(f'order {order_id} goes to db')
-        print(order_obj)
+        _ = dynamo_client.put_item(
+            TableName='orders_table',
+            Item={
+                'id': {
+                    'N': str(order_id)
+                },
+                'cartItems': cart_items
+            }
+        )
+    
 
 def queue_order(order_id):
     with queue_lock:
@@ -79,17 +111,21 @@ class OrderThread(threading.Thread):
             order_id = get_id()
             insert_order(order_id, payload)
             queue_order(order_id)
-            await_status(order_id)
-            # need to get method from headers
-            # the method determines, what goes next
-            self.client_socket.sendall(b'HTTP/1.1 200\r\n')
-            self.client_socket.close()
-            # need to get the method and the payload to go on
-        
+            status = await_status(order_id)
+
+            if status == 'Done':
+                self.client_socket.sendall(b'HTTP/1.1 200\r\n')
+
+            elif status == 'Failed':
+                self.client_socket.sendall(b'HTTP/1.1 400\r\n')
+
+            else:
+                self.client_socket.sendall(b'HTTP/1.1 500\r\n')
+
         elif verb == b'PUT':
             update_status(payload)
             self.client_socket.sendall(b'HTTP/1.1 200\r\n')
-            self.client_socket.close()          
+        self.client_socket.close()          
 
     def get_data(self) -> bytes:
         """Return the data of request.
@@ -171,5 +207,6 @@ def main():
         new_order_thread.start()
 
 if __name__ == "__main__":
+    dynamo_client = boto3.client('dynamodb')
     main()
 
