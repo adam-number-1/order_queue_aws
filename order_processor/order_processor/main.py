@@ -161,8 +161,6 @@ def main(
 
 if __name__ == '__main__':
     dynamo_client = boto3.client('dynamodb')
-    items_table = dynamo_client.Table('items')
-    orders_table = dynamo_client.Table('orders')
 
     redis_queue_connection = redis.Redis(
         host='localhost', 

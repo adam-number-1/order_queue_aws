@@ -51,7 +51,7 @@ def get_verb(headers: bytes) -> bytes:
     return bytes(result)
 
 def insert_order(order_id: int, order_obj: dict) -> None:
-
+    order_obj = json.loads(order_obj)
     cart_items: dict[str, list] = {
         'L': []
     }
@@ -105,7 +105,7 @@ class OrderThread(threading.Thread):
     def run(self):
         # get the data to parse the http request
         headers, payload = self.get_data()
-        print(headers, payload)
+        print(payload)
         verb = get_verb(headers)
         if verb == b'POST': 
             order_id = get_id()
