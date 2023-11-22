@@ -1,13 +1,22 @@
 from datetime import datetime
 from time import sleep
-from typing import Generator, Optional
+from typing import Optional
 
 import boto3
 import json
 import socket
+import sys
 import threading
+import redis
 
-from order_wsgi.redis_con import redis_connection
+redis_host, redis_port = sys.argv[2].split(':')
+redis_port = int(redis_port)
+
+redis_connection = redis.Redis(
+    host=redis_host, 
+    port=redis_port, 
+    decode_responses=True
+)
 
 dynamo_client = boto3.client('dynamodb')
 
@@ -82,7 +91,6 @@ def insert_order(order_id: int, order_obj: dict) -> None:
             }
         )
     
-
 def queue_order(order_id):
     with queue_lock:
         print(f'putting order {order_id} to redis queue')
@@ -186,8 +194,8 @@ class OrderThread(threading.Thread):
             content_length -= len(payload)
 
 def main():
-    host = '127.0.0.1'
-    port = 8080
+    host, port = sys.argv[1].split(':')
+    port = int(port)
 
     # Create a socket and bind it to the specified host and port
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
