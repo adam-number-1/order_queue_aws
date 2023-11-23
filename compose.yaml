@@ -1,0 +1,47 @@
+services:
+  redis:
+    image: redis:latest
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - test-net
+
+  order_wsgi:
+    image: order_wsgi:1.0.0
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["order_wsgi:8080", "redis:6379"]
+    expose:
+      - 8080
+    networks:
+      - test-net
+    secrets:
+      - source: aws-credentials
+        target: /root/.aws/credentials
+
+  order_processor:
+    image: order_processor:1.0.0
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["order_wsgi:8080", "redis:6379"]
+    networks:
+      - test-net
+    secrets:
+      - source: aws-credentials
+        target: /root/.aws/credentials
+
+networks:
+  test-net:
+    attachable: true
+
+secrets:
+    aws-credentials:
+      file: 
+      
+      

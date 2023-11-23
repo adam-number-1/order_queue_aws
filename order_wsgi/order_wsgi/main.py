@@ -195,6 +195,7 @@ class OrderThread(threading.Thread):
 
 def main():
     host, port = sys.argv[1].split(':')
+    print(f'order_wsgi at {host} starting')
     port = int(port)
 
     # Create a socket and bind it to the specified host and port
