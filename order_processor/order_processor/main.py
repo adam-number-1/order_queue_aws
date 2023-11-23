@@ -1,7 +1,7 @@
 import requests
 import redis
-
 import boto3
+import sys
 
 # i could potentialy spawn a new thread everythime i rpop and do the job
 # but for symplicity i will keep it single thread... for a while :]
@@ -139,7 +139,8 @@ def process_order(
 
 def main(
     redis_queue_connection,
-    dynamo_client
+    dynamo_client,
+    wsgi_addr
 ):
     while True:
         # lets block until there is somethign
@@ -151,7 +152,7 @@ def main(
 
         # time to tell the wsgi how it went
         requests.put(
-            'http://localhost:8080', 
+            f'http://{wsgi_addr}', 
             json={
                 'id': order_id,
                 'status': status
@@ -160,16 +161,20 @@ def main(
 
 
 if __name__ == '__main__':
+    print(f'order_processor starting')
     dynamo_client = boto3.client('dynamodb')
-
+    wsgi_addr = sys.argv[1]
+    redis_host, redis_port = sys.argv[2].split(':')
+    redis_port = int(redis_port)
     redis_queue_connection = redis.Redis(
-        host='localhost', 
-        port=6379, 
+        host=redis_host, 
+        port=redis_port, 
         decode_responses=True
     )
     main(
         redis_queue_connection,
-        dynamo_client
+        dynamo_client,
+        wsgi_addr
     )
 
 

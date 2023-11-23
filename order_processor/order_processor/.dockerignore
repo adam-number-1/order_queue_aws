@@ -1,0 +1,5 @@
+venv*
+tests*
+Dockerfile
+__pycache__
+.pytest*
